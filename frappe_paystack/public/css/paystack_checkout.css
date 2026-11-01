@@ -97,7 +97,7 @@
 [v-cloak] { display: none; }
 
 .ev-authorization {
-    font-size: 9px;
+    font-size: 10px;
     line-height: 1.6;
     color: var(--text-muted, #6b7280);
     margin: 12px 0;
