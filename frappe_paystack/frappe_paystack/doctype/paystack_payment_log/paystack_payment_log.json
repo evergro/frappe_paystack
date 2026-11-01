@@ -30,6 +30,10 @@
         "payment_request",
         "customer_authorization",
         "integration_request",
+        "save_card",
+        "consent_at",
+        "recurring_consent",
+        "consent_text",
         "tab_break_v5qn",
         "errors"
     ],
@@ -229,6 +233,23 @@
             "fieldname": "save_card",
             "fieldtype": "Check",
             "label": "Save Card",
+            "no_copy": 1,
+            "read_only": 1
+        },
+        {
+            "description": "The buyer explicitly authorised recurring monthly charges.",
+            "fieldname": "recurring_consent",
+            "fieldtype": "Check",
+            "label": "Recurring Payment Consent",
+            "default": "0",
+            "no_copy": 1,
+            "read_only": 1
+        },
+        {
+            "description": "The recurring-payment authorisation wording shown to and accepted by the buyer.",
+            "fieldname": "consent_text",
+            "fieldtype": "Small Text",
+            "label": "Recurring Consent Text",
             "no_copy": 1,
             "read_only": 1
         },

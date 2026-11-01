@@ -714,29 +714,62 @@ def payable_log(reference: str) -> Any:
 
     return log
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep - guest by design; rate limited, POST only
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
 @rate_limit(limit=HOSTED_CHECKOUT_LIMIT, seconds=HOSTED_CHECKOUT_WINDOW)
 def record_consent(reference: str, save_card: int = 0, consent: int = 0) -> bool:
     """
-    Keep what the buyer agreed to before they pay.
-
-    A subscription is refused without its recurring-charge consent, and always
-    keeps the card, because next month's charge needs it.
+    Record the buyer's card-saving preference and recurring-payment consent.
     """
     log = payable_log(reference)
     order = frappe.get_doc(log.linked_doctype, log.linked_docname)
 
     subscription = bool(order.get("subscription"))
-    if subscription and not cint(consent):
+    consent_given = cint(consent)
+
+    if subscription and not consent_given:
         frappe.throw(_("Tick the box to authorise the recurring charge."))
 
     keep_card = 1 if subscription else cint(save_card)
-    values = {"save_card": keep_card}
-    if keep_card:
+
+    values = {
+        "save_card": keep_card,
+        "recurring_consent": 1 if subscription and consent_given else 0,
+    }
+
+    if subscription:
+        company_name = (
+            order.get("company_name")
+            or frappe.get_cached_value(
+                "Company", order.company, "company_name"
+            )
+            or order.company
+        )
+
+        values.update({
+            "consent_at": now_datetime(),
+            "consent_text": _(
+                "You agree that {0} will charge your card the amount above "
+                "now and on a recurring monthly basis until you cancel. "
+                "You can cancel at any time via WhatsApp, email or call."
+            ).format(company_name),
+        })
+
+    elif keep_card:
         values["consent_at"] = now_datetime()
 
-    frappe.db.set_value(LOG_DOCTYPE, log.name, values, update_modified=False)
+    else:
+        values["consent_text"] = None
+
+    frappe.db.set_value(
+        LOG_DOCTYPE,
+        log.name,
+        values,
+        update_modified=False,
+    )
+
     return True
+
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep - guest by design; rate limited, POST only
 @rate_limit(limit=HOSTED_CHECKOUT_LIMIT, seconds=HOSTED_CHECKOUT_WINDOW)
