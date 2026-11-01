@@ -96,14 +96,45 @@
 @keyframes ev-spin { to { transform: rotate(360deg); } }
 [v-cloak] { display: none; }
 
+/* One-time payment authorisation */
 .ev-authorization {
-    font-size: 10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 13px 15px;
+    margin: 14px 0;
+    background: #f5f8f6;
+    border: 1px solid #e1ebe4;
+    border-radius: 10px;
+    color: #52645a;
+    font-size: 13px;
     line-height: 1.6;
-    color: var(--text-muted, #6b7280);
-    margin: 12px 0;
 }
 
-.ev-authorization strong {
-    color: var(--text-color, #222);
+.ev-authorization-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #e4f0e7;
+    color: #34764b;
+    font-size: 13px;
+}
+
+.ev-authorization-text {
+    flex: 1;
+}
+
+.ev-authorization-text strong {
+    color: #344b3c;
     font-weight: 600;
+}
+
+.ev-authorization-text .ev-authorization-amount {
+    color: #267344;
+    font-weight: 700;
+    white-space: nowrap;
 }

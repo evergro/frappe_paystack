@@ -121,12 +121,17 @@
 
           <!-- One-time payment authorisation: no checkbox -->
           <p class="ev-authorization" v-else>
-              {{ _("By proceeding, you authorise") }}
-              [% doc.company_name %]
-              {{ _("to charge") }}
-              <strong>[% formattedChargeAmount %]</strong>
-              {{ _("for this invoice.") }}
-          </p>
+				<span class="ev-authorization-icon">
+					<i class="fa fa-shield-check"></i>
+				</span>
+				<span class="ev-authorization-text">
+					{{ _("By proceeding, you authorise") }}
+					<strong>[% doc.company_name %]</strong>
+					{{ _("to charge") }}
+					<strong class="ev-authorization-amount">[% formattedChargeAmount %]</strong>
+					{{ _("for this invoice.") }}
+				</span>
+			</p>
 
 					<div class="ev-alert" :class="'ev-alert--' + feedback.tone" v-if="feedback.message" role="status" aria-live="polite">
 						[% feedback.message %]
