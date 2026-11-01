@@ -6,7 +6,7 @@ from typing import Any, Optional
 import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
-from frappe.utils import cint, flt
+from frappe.utils import cint, flt, now_datetime
 
 from frappe_paystack.frappe_paystack.doctype.paystack_customer_authorization import (
     paystack_customer_authorization as authorizations,
@@ -617,7 +617,8 @@ def process_charge_webhook_event(data: dict, company: Optional[str] = None) -> N
             notify_payment_authorized(log)
             log.reload()
             log.run_method("on_update")
-            authorizations.capture_authorization(log, tx)
+            if log.save_card:
+                authorizations.capture_authorization(log, tx)
     except Exception as e:
         log_error_for(
             title=f"Paystack charge webhook failed: {ref or 'unmatched'}",
@@ -693,7 +694,7 @@ def validate_payment_link(docname: str) -> dict:
     """Return payment data for the checkout page."""
     if frappe.db.exists(LOG_DOCTYPE, docname):
         doc = frappe.get_doc(LOG_DOCTYPE, docname)
-        return doc.get_data()
+        return doc.get_public_data()
     return {}
 
 
@@ -713,6 +714,29 @@ def payable_log(reference: str) -> Any:
 
     return log
 
+@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep - guest by design; rate limited, POST only
+@rate_limit(limit=HOSTED_CHECKOUT_LIMIT, seconds=HOSTED_CHECKOUT_WINDOW)
+def record_consent(reference: str, save_card: int = 0, consent: int = 0) -> bool:
+    """
+    Keep what the buyer agreed to before they pay.
+
+    A subscription is refused without its recurring-charge consent, and always
+    keeps the card, because next month's charge needs it.
+    """
+    log = payable_log(reference)
+    order = frappe.get_doc(log.linked_doctype, log.linked_docname)
+
+    subscription = bool(order.get("subscription"))
+    if subscription and not cint(consent):
+        frappe.throw(_("Tick the box to authorise the recurring charge."))
+
+    keep_card = 1 if subscription else cint(save_card)
+    values = {"save_card": keep_card}
+    if keep_card:
+        values["consent_at"] = now_datetime()
+
+    frappe.db.set_value(LOG_DOCTYPE, log.name, values, update_modified=False)
+    return True
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep - guest by design; rate limited, POST only
 @rate_limit(limit=HOSTED_CHECKOUT_LIMIT, seconds=HOSTED_CHECKOUT_WINDOW)

@@ -73,14 +73,37 @@
 				emailTouched: false,
 				busy: false,
 				feedback: { message: "", tone: "info" },
-				payLabel: __("Pay {0}", [
-					formatMoney(payload.payment_amount, payload.currency),
-				]),
-				busyLabel: __("Processing..."),
+				// A subscription must keep the card for next month's charge.
+				saveCard: payload.variant === "subscription",
+				consent: payload.variant !== "subscription",
 			};
 		},
 
 		computed: {
+			isSubscription() {
+				return this.doc.variant === "subscription";
+			},
+
+			payLabel() {
+				return this.isSubscription
+					? __("Subscribe")
+					: __("Pay {0}", [formatMoney(this.doc.payment_amount, this.doc.currency)]);
+			},
+			heading() {
+				return this.isSubscription
+					? __("Complete your subscription")
+					: __("Complete your payment");
+			},
+
+			planBadge() {
+				return this.isSubscription
+					? __("Monthly subscription")
+					: __("One-time payment");
+			},
+
+			busyLabel() {
+				return this.busy ? __("Processing...") : this.payLabel;
+			},
 			formattedChargeAmount() {
 				return formatMoney(this.doc.payment_amount, this.doc.currency);
 			},
@@ -118,7 +141,7 @@
 			},
 
 			canSubmit() {
-				return !this.busy && this.isEmailValid;
+				return !this.busy && this.isEmailValid && this.consent;
 			},
 
 			closedReason() {
@@ -128,7 +151,7 @@
 				if (this.doc.is_expired) {
 					return __("This payment link has expired. Please request a new one.");
 				}
-				if (this.doc.order_docstatus !== 1) {
+				if (!this.doc.is_payable) {
 					return __("The related document is no longer active, so it cannot be paid.");
 				}
 				return __("This document has been settled and is no longer payable.");
@@ -136,10 +159,12 @@
 		},
 
 		methods: {
+			money(amount) {
+				return formatMoney(amount, this.doc.order_currency || this.doc.currency);
+			},
 			setFeedback(message, tone) {
 				this.feedback = { message: message, tone: tone || "info" };
 			},
-
 			async startPayment() {
 				if (!this.canSubmit) {
 					this.emailTouched = true;
@@ -160,6 +185,25 @@
 				if (!this.doc.is_payable) {
 					this.busy = false;
 					this.setFeedback(this.closedReason, "warning");
+					return;
+				}
+
+				// Store what the customer agreed to before the popup opens.
+				try {
+					await frappe.call({
+						method: "frappe_paystack.api.record_consent",
+						args: {
+							reference: this.doc.reference,
+							save_card: this.saveCard ? 1 : 0,
+							consent: this.consent ? 1 : 0,
+						},
+					});
+				} catch (error) {
+					this.busy = false;
+					this.setFeedback(
+						(error && error.message) || __("We could not save your choices. Please try again."),
+						"danger"
+					);
 					return;
 				}
 
@@ -225,11 +269,9 @@
 					amount: Math.round(Number(this.doc.payment_amount) * 100),
 					currency: this.doc.currency,
 					reference: this.doc.reference,
+					// The webhook finds the Payment Log through metadata.reference.
 					metadata: {
 						reference: this.doc.reference,
-						reference_doctype: this.doc.reference_doctype,
-						reference_docname: this.doc.reference_docname,
-						customer: this.doc.customer,
 						email: this.email,
 					},
 					onSuccess() {
@@ -256,6 +298,7 @@
 						);
 					},
 				});
+        
 			},
 		},
 	}).mount("#paystack-checkout");

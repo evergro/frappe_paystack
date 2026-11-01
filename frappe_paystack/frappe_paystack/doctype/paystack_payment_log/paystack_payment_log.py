@@ -23,6 +23,7 @@ from frappe_paystack.utils import (
 from frappe_paystack.utils.payment_request import resolve_payment_entry
 from frappe_paystack.utils.reconciliation import SETTLED_PAYSTACK_STATUSES, ReconciliationEngine
 from frappe_paystack.utils.sweep import run_sweep
+from frappe_paystack.utils.checkout import checkout_view
 
 from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 
@@ -42,6 +43,20 @@ VALID_STATUSES = (
     "Partially Refunded",
     "Refunded",
     "Failed",
+)
+
+# The only keys the public checkout page receives from get_data.
+PUBLIC_KEYS = (
+    "reference",
+    "status",
+    "email",
+    "currency",
+    "order_currency",
+    "payment_amount",
+    "public_key",
+    "checkout_mode",
+    "is_expired",
+    "is_payable",
 )
 
 # Statuses meaning the money has been captured; no further payment is due.
@@ -272,7 +287,19 @@ class PaystackPaymentLog(Document):
         """Return the payment data the public checkout page is allowed to see."""
         order = frappe.get_doc(self.linked_doctype, self.linked_docname)
         gateway_settings = self.get_payment_public_key() or {}
-
+        customer_name = (
+            frappe.db.get_value("Customer", order.customer, "customer_name")
+            if getattr(order, "customer", None) else ""
+        ) or ""
+        description = (
+            getattr(order, "title", None)
+            or getattr(order, "remarks", None)
+            or getattr(order, "subject", None)
+            or _("Garden Maintenance service")
+        )
+        is_subscription = bool(
+            order.doctype == "Sales Invoice" and getattr(order, "subscription", None)
+        )
         charge_currency = gateway_settings.get("currency") or self.currency or "NGN"
         charge_amount = flt(self.amount) * flt(order.conversion_rate or 1)
 
@@ -296,7 +323,20 @@ class PaystackPaymentLog(Document):
             "expires_at": str(self.expires_at or ""),
             "is_expired": self.is_expired(),
             "is_payable": self.is_payable(order),
+            "customer_name": customer_name,
+            "service_description": frappe.utils.strip_html(str(description))[:180],
+            "order_date": str(getattr(order, "posting_date", "") or ""),
+            "is_subscription": is_subscription,
         }
+    
+    def get_public_data(self) -> dict:
+        """Return what the guest checkout page may see: no customer id, document ids or doctypes."""
+        data = self.get_data()
+        order = frappe.get_doc(self.linked_doctype, self.linked_docname)
+
+        public = {key: data.get(key) for key in PUBLIC_KEYS}
+        public.update(checkout_view(self.company, order))
+        return public
 
     def is_payable(self, order: Any) -> bool:
         """Return whether this log can still be paid."""

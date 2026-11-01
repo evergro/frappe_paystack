@@ -16,3 +16,4 @@ cypress/downloads
 .coverage
 .coverage.*
 htmlcov
+frappe_paystack/public/dist

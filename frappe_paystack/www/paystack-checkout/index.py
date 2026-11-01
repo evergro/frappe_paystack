@@ -39,7 +39,7 @@ def get_context(context: dict) -> dict:
         return context
 
     doc = frappe.get_doc(PAYMENT_LOG, reference)
-    data = doc.get_data()
+    data = doc.get_public_data()   # was doc.get_data()
 
     context.reference = reference
     context.doc = data

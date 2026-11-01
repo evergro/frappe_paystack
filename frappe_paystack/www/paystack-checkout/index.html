@@ -3,100 +3,148 @@
 {% block title %}{{ _("Complete Payment") }}{% endblock %}
 
 {% block head_include %}
-<link rel="stylesheet" href="/assets/frappe_paystack/css/paystack_checkout.css">
+<link rel="stylesheet" href="/assets/frappe_paystack/css/paystack_checkout.css?v=5">
 {% endblock %}
 
 {% block page_content %}
-<div id="paystack-checkout" class="ps-checkout">
+<div id="paystack-checkout" class="ev-page">
 
 	{%- if not reference or not doc -%}
-	<section class="ps-card ps-card--message">
-		<div class="ps-icon ps-icon--error" aria-hidden="true">!</div>
-		<h1 class="ps-title">{{ _("Payment link not found") }}</h1>
-		<p class="ps-subtitle">
-			{{ _("This payment link is invalid or has been removed. Please request a new one.") }}
-		</p>
+	<section class="ev-card ev-card--message">
+		<div class="ev-icon" aria-hidden="true">!</div>
+		<h1 class="ev-title">{{ _("Payment link not found") }}</h1>
+		<p class="ev-muted">{{ _("This payment link is invalid or has been removed. Please contact us for a new one.") }}</p>
 	</section>
 
 	{%- elif not doc.public_key -%}
-	<section class="ps-card ps-card--message">
-		<div class="ps-icon ps-icon--error" aria-hidden="true">!</div>
-		<h1 class="ps-title">{{ _("Payments unavailable") }}</h1>
-		<p class="ps-subtitle">
-			{{ _("This merchant has not finished setting up online payments. Please contact them directly.") }}
-		</p>
-		<p class="ps-ref">{{ _("Reference") }}: <code>{{ reference }}</code></p>
+	<section class="ev-card ev-card--message">
+		<div class="ev-icon" aria-hidden="true">!</div>
+		<h1 class="ev-title">{{ _("Payments unavailable") }}</h1>
+		<p class="ev-muted">{{ _("Online payments aren't available right now. Please contact us directly.") }}</p>
 	</section>
 
 	{%- else -%}
-	<article class="ps-card" v-cloak>
-		<header class="ps-head">
-			<p class="ps-eyebrow">{{ _("Secure payment") }}</p>
-			<h1 class="ps-amount">[% formattedChargeAmount %]</h1>
-			<p class="ps-converted" v-if="showConverted">
-				[% formattedOrderTotal %] &middot; {{ _("rate") }} [% exchangeRate %]
-			</p>
-			<span class="ps-status" :class="'ps-status--' + statusTone">[% statusLabel %]</span>
-		</header>
+	<article class="ev-wrap" v-cloak>
+		<p class="ev-kicker">{{ _("SECURE CHECKOUT") }}</p>
+		<h1 class="ev-heading">[% heading %]</h1>
+		<p class="ev-intro">{{ _("Review your garden service and choose how you'd like to pay.") }}</p>
 
-		<dl class="ps-details">
-			<div class="ps-row">
-				<dt>{{ _("Billed to") }}</dt>
-				<dd>[% doc.customer %]</dd>
+		<div class="ev-grid">
+
+			<!-- Left: what is being paid for -->
+			<div class="ev-col">
+				<section class="ev-card">
+					<div class="ev-card-head">
+						<div>
+							<h2 class="ev-title">{{ _("Your service") }}</h2>
+							<p class="ev-sub">[% doc.document_label %]</p>
+						</div>
+						<span class="ev-pill">[% planBadge %]</span>
+					</div>
+
+					<ul class="ev-lines" v-if="doc.lines && doc.lines.length">
+						<li v-for="(line, i) in doc.lines" :key="i">
+							<span class="ev-qty">[% line.qty %]</span>
+							<span class="ev-line-text">
+								<strong>[% line.name %]</strong>
+								<small v-if="line.description">[% line.description %]</small>
+							</span>
+							<span class="ev-line-amount">[% line.amount_text %]</span>
+						</li>
+					</ul>
+
+					<dl class="ev-sums" v-if="doc.discount || doc.taxes">
+						<div><dt>{{ _("Subtotal") }}</dt><dd>[% doc.subtotal_text %]</dd></div>
+						<div class="ev-sums-green" v-if="doc.discount"><dt>{{ _("Discount") }}</dt><dd>&minus; [% doc.discount_text %]</dd></div>
+						<div v-if="doc.taxes"><dt>{{ _("Tax") }}</dt><dd>[% doc.taxes_text %]</dd></div>
+					</dl>
+
+					<div class="ev-total">
+						<div>
+							<strong>{{ _("Total due today") }}</strong>
+							<small v-if="isSubscription">{{ _("Then charged monthly until you cancel") }}</small>
+							<small v-else>{{ _("No recurring or annual charge") }}</small>
+						</div>
+						<span class="ev-total-amount">[% formattedChargeAmount %]</span>
+					</div>
+				</section>
+
+				<section class="ev-note" v-if="doc.service_address">
+					<span class="ev-note-label">{{ _("SERVICE ADDRESS") }}</span>
+					<strong>[% doc.service_address %]</strong>
+				</section>
 			</div>
-			<div class="ps-row" v-if="doc.email">
-				<dt>{{ _("Email") }}</dt>
-				<dd>[% doc.email %]</dd>
+
+			<!-- Right: who is paying, and how -->
+			<div class="ev-col">
+				<section class="ev-card">
+					<h2 class="ev-title">{{ _("Your details") }}</h2>
+					<p class="ev-sub">{{ _("For your receipt and service updates") }}</p>
+
+					<dl class="ev-details">
+						<div v-if="doc.customer_name"><dt>{{ _("Name") }}</dt><dd>[% doc.customer_name %]</dd></div>
+						<div v-if="doc.email"><dt>{{ _("Email") }}</dt><dd>[% doc.email %]</dd></div>
+						<div v-if="doc.mobile"><dt>{{ _("Mobile") }}</dt><dd>[% doc.mobile %]</dd></div>
+						<div v-if="doc.billing_address"><dt>{{ _("Billing address") }}</dt><dd>[% doc.billing_address %]</dd></div>
+					</dl>
+
+					<label class="ev-field" v-if="canPay && needsEmail">
+						<span class="ev-label">{{ _("Email for your receipt") }}</span>
+						<input type="email" class="ev-input" :class="{ 'ev-input--bad': emailTouched && !isEmailValid }"
+							v-model.trim="email" placeholder="you@example.com" autocomplete="email" @blur="emailTouched = true">
+						<span class="ev-hint" v-if="emailTouched && !isEmailValid">{{ _("Enter a valid email address.") }}</span>
+					</label>
+				</section>
+
+				<section class="ev-card" v-if="canPay">
+					<h2 class="ev-title">{{ _("Payment method") }}</h2>
+					<p class="ev-sub">{{ _("Pay by card. You'll enter your card details securely on the next step.") }}</p>
+
+					<label class="ev-check ev-check--box">
+              <input type="checkbox" v-model="saveCard" :disabled="isSubscription">
+              <span>
+                  {{ _("Save my card details for future payments") }}
+                  <small v-if="isSubscription">
+                      {{ _("Required so your monthly payment can be taken.") }}
+                  </small>
+              </span>
+          </label>
+
+          <!-- Subscription consent checkbox only -->
+          <label class="ev-check" v-if="isSubscription">
+              <input type="checkbox" v-model="consent">
+              <span>
+                  {{ _("You agree that") }} [% doc.company_name %]
+                  {{ _("will charge your card the amount above now and on a recurring monthly basis until you cancel. You can cancel at any time via WhatsApp, email or call.") }}
+              </span>
+          </label>
+
+          <!-- One-time payment authorisation: no checkbox -->
+          <p class="ev-authorization" v-else>
+              {{ _("By proceeding, you authorise") }}
+              [% doc.company_name %]
+              {{ _("to charge") }}
+              <strong>[% formattedChargeAmount %]</strong>
+              {{ _("for this invoice.") }}
+          </p>
+
+					<div class="ev-alert" :class="'ev-alert--' + feedback.tone" v-if="feedback.message" role="status" aria-live="polite">
+						[% feedback.message %]
+					</div>
+
+					<button type="button" class="ev-button" :disabled="!canSubmit" @click="startPayment">
+						<span v-if="busy" class="ev-spinner" aria-hidden="true"></span>
+						[% busyLabel %]
+					</button>
+					<p class="ev-secure">{{ _("Encrypted and processed securely by Paystack") }}</p>
+				</section>
+
+				<section class="ev-card" v-else>
+					<h2 class="ev-title">[% statusLabel %]</h2>
+					<p class="ev-muted">[% closedReason %]</p>
+					<div class="ev-alert" :class="'ev-alert--' + feedback.tone" v-if="feedback.message">[% feedback.message %]</div>
+				</section>
 			</div>
-			<div class="ps-row">
-				<dt>{{ _("Document") }}</dt>
-				<dd>[% doc.order_no %]</dd>
-			</div>
-			<div class="ps-row">
-				<dt>{{ _("Reference") }}</dt>
-				<dd><code>[% doc.reference %]</code></dd>
-			</div>
-			<div class="ps-row ps-row--total">
-				<dt>{{ _("Amount due") }}</dt>
-				<dd>[% formattedChargeAmount %]</dd>
-			</div>
-		</dl>
-
-		<div
-			class="ps-alert"
-			:class="'ps-alert--' + feedback.tone"
-			v-if="feedback.message"
-			role="status"
-			aria-live="polite"
-		>[% feedback.message %]</div>
-
-		<div class="ps-actions" v-if="canPay">
-			<label class="ps-field" v-if="needsEmail">
-				<span class="ps-label">{{ _("Email for your receipt") }}</span>
-				<input
-					type="email"
-					v-model.trim="email"
-					class="ps-input"
-					:class="{ 'ps-input--invalid': emailTouched && !isEmailValid }"
-					placeholder="you@example.com"
-					autocomplete="email"
-					@blur="emailTouched = true"
-				>
-				<span class="ps-hint" v-if="emailTouched && !isEmailValid">
-					{{ _("Enter a valid email address.") }}
-				</span>
-			</label>
-
-			<button type="button" class="ps-button" :disabled="!canSubmit" @click="startPayment">
-				<span v-if="busy" class="ps-spinner" aria-hidden="true"></span>
-				[% busy ? busyLabel : payLabel %]
-			</button>
-
-			<p class="ps-secure">{{ _("Payments are processed securely by Paystack.") }}</p>
-		</div>
-
-		<div class="ps-actions" v-else>
-			<p class="ps-closed">[% closedReason %]</p>
 		</div>
 	</article>
 	{%- endif -%}
